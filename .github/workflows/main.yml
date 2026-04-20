@@ -1,0 +1,30 @@
+name: 下载+缓存APK并反编译
+
+on:
+  workflow_dispatch:
+    inputs:
+      apk_url:
+        description: 'APK 下载直链'
+        required: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # 缓存目录
+      - name: 配置缓存
+        uses: actions/cache@v4
+        with:
+          path: ./cache
+          key: androidapks
+
+      - name: 下载APK到缓存
+        run: |
+          mkdir -p cache
+          if [ ! -f cache/target.apk ]; then
+            wget -O cache/target.apk "${{ github.event.inputs.apk_url }}"
+          fi
+
+      # 下面你自己加 jadx 反编译逻辑即可
