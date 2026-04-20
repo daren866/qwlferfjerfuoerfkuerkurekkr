@@ -1,4 +1,4 @@
-name: 上传产物到 Releases (curl版)
+name: 上传产物到 Releases
 on:
   workflow_dispatch:
     inputs:
@@ -6,66 +6,35 @@ on:
         description: 'Release 标签名'
         required: true
         default: 'latest'
-      artifact_url:
-        description: '产物链接'
+      run_id:
+        description: 'Actions Run ID'
         required: true
+        default: '24675353299'
 
 jobs:
   upload:
     runs-on: ubuntu-latest
     permissions:
+      actions: read
       contents: write
     steps:
-      - name: 下载产物
+      - name: 安装 gh CLI
         run: |
-          ARTIFACT_ID=$(echo "${{ github.event.inputs.artifact_url }}" | sed 's/.*\/artifacts\///')
-          echo "Artifact ID: $ARTIFACT_ID"
-          
-          # 使用 -L 跟随重定向，-v 查看详细信息
-          curl -L -v \
-            -H "Accept: application/vnd.github.v3+json" \
-            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            -o code.zip \
-            "https://api.github.com/repos/${{ github.repository }}/actions/artifacts/$ARTIFACT_ID/zip"
-          
-          echo "下载的文件大小："
-          ls -lh code.zip
-          
-          # 检查是否是有效的 zip 文件
-          if file code.zip | grep -q "Zip archive"; then
-            echo "✅ 下载成功，有效的 ZIP 文件"
-          else
-            echo "❌ 下载失败，文件不是有效的 ZIP"
-            cat code.zip  # 显示错误信息
-            exit 1
-          fi
+          curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list
+          sudo apt update
+          sudo apt install gh -y
 
-      - name: 创建 Release
+      - name: 下载并上传
         run: |
-          curl -X POST \
-            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Content-Type: application/json" \
-            -d "{\"tag_name\":\"${{ github.event.inputs.tag_name }}\",\"name\":\"${{ github.event.inputs.tag_name }}\",\"body\":\"从 Actions 产物自动上传\",\"draft\":false,\"prerelease\":false}" \
-            "https://api.github.com/repos/${{ github.repository }}/releases" \
-            2>/dev/null || echo "Release may already exist"
-
-      - name: 上传文件到 Release
-        run: |
-          TAG="${{ github.event.inputs.tag_name }}"
+          # 下载 Java源码 产物
+          gh run download ${{ github.event.inputs.run_id }} --name "Java源码"
           
-          # 获取 upload_url
-          RESPONSE=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            "https://api.github.com/repos/${{ github.repository }}/releases/tags/$TAG")
-          
-          UPLOAD_URL=$(echo "$RESPONSE" | grep -o '"upload_url":"[^"]*"' | cut -d'"' -f4 | sed 's/{?name,label}//')
-          
-          echo "Upload URL: $UPLOAD_URL"
-          
-          # 上传文件
-          curl -X POST \
-            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Content-Type: application/zip" \
-            --data-binary "@code.zip" \
-            "$UPLOAD_URL?name=code.zip"
-          
-          echo "✅ 上传完成"
+          # 上传到 Release
+          gh release upload ${{ github.event.inputs.tag_name }} "Java源码.zip" --clobber \
+            --repo "${{ github.repository }}" || \
+          gh release create ${{ github.event.inputs.tag_name }} "Java源码.zip" \
+            --title "${{ github.event.inputs.tag_name }}" \
+            --notes "从 Actions 产物自动上传"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
