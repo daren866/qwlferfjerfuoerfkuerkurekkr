@@ -1,30 +1,34 @@
-name: 最强APK反编译
+name: APK 一键逆向（最终稳定版）
 on:
   workflow_dispatch:
     inputs:
       url:
-        description: 输入 transfer.sh / file.io 公开直链
+        description: 粘贴 APK 公开直链（transfer.sh）
         required: true
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: 下载真实APK
+      - name: 1. 下载 APK
         run: |
           wget -O target.apk "${{ github.event.inputs.url }}"
-          ls -lh target.apk  # 必须显示 几百MB
+          ls -lh target.apk
 
-      - name: 下载反编译工具
+      - name: 2. 下载 JADX 反编译工具
         run: |
           wget -O jadx.zip https://github.com/skylot/jadx/releases/download/v1.5.3/jadx-1.5.3.zip
           unzip -q jadx.zip
+          # 重命名成标准名称，防止路径错误
+          mv jadx-1.5.3 jadx
 
-      - name: 开始逆向！
-        run: jadx/bin/jadx --export-gradle -d out target.apk
+      - name: 3. 开始逆向！（核心命令）
+        run: |
+          chmod +x jadx/bin/jadx
+          jadx/bin/jadx --export-gradle -d out target.apk
 
-      - name: 获取源码
+      - name: 4. 上传逆向完成的源码
         uses: actions/upload-artifact@v4
         with:
-          name: 逆向完成-源码
+          name: 逆向源码
           path: out/
