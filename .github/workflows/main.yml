@@ -2,10 +2,6 @@ name: 下载123云盘APK + 缓存 + 反编译
 
 on:
   workflow_dispatch:
-    inputs:
-      apk_url:
-        description: '粘贴123云盘下载直链'
-        required: true
 
 jobs:
   build:
@@ -13,39 +9,37 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: 配置缓存
-        uses: actions/cache@v4
-        with:
-          path: ./cache
-          key: androidapks
+      # 先删除旧缓存（防止旧坏文件干扰）
+      - name: 清空旧缓存
+        run: rm -rf cache
 
-      - name: 下载APK（修复版）
+      # 下载 APK（123云盘真实下载地址）
+      - name: 下载APK
         run: |
           mkdir -p cache
           curl -L -f --ipv4 \
             -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36' \
             -H 'Referer: https://www.123pan.com/' \
-            -H 'Accept: */*' \
             --connect-timeout 30 \
             --max-time 3600 \
-            -o 'cache/target.apk' \
-            "${{ github.event.inputs.apk_url }}"
-          
-          # 检查文件大小，防止下载失败
-          ls -lh cache/target.apk
+            -o cache/target.apk \
+            "https://59-47-239-233.pd1.cjjd19.com/1135-user-other-free-download-cdn.123295.com/123-277/037824a7/1815635943-0/037824a73a646813d0aacc882ca55115/c-m105?v=5&t=1777294601&r=0VHVYQ&bzc=1&bzs=313831353633353934333a323a313a333333303536363133&ur=vvmgvgpngvnl&urn=0&s=17772946019f766be18a38f254ab2a567e7da698b9&bzp=0&bi=403044789&filename=bilibili.apk&x-mf-biz-cid=8a590ecc-0906-450e-8b50-cd0b50d69ea2-6eaa77&auto_redirect=0&ndcp=1&cache_type=1"
 
-      - name: 安装 JADX
+      # 查看文件大小（确认下载成功）
+      - name: 检查APK大小
+        run: ls -lh cache/target.apk
+
+      # 反编译
+      - name: 安装JADX并反编译
         run: |
           wget -q -O jadx.zip https://github.com/skylot/jadx/releases/download/v1.5.3/jadx-1.5.3.zip
-          unzip -q jadx.zip -d jadx
+          unzip -q jadx.zip
           chmod +x jadx/bin/jadx
-
-      - name: 反编译APK
-        run: |
           jadx/bin/jadx --export-gradle -d output cache/target.apk
 
-      - name: 上传结果
+      # 上传结果
+      - name: 上传反编译工程
         uses: actions/upload-artifact@v4
         with:
-          name: decompiled
+          name: decompiled-project
           path: output/
