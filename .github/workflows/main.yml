@@ -23,11 +23,9 @@ jobs:
           fi
           echo "✅ APK 有效"
 
-      - name: 3. 删除 APK 内损坏的 ZIP 资源（避免 JADX 解析报错）
+      - name: 3. 删除 APK 内损坏的 ZIP 资源
         run: |
-          # 列出 assets 中所有 .zip 文件（可选，仅调试）
           unzip -l target.apk | grep '\.zip$' || echo "未发现 .zip 文件"
-          # 删除这些 zip 文件（它们通常不是代码，不影响反编译）
           zip -d target.apk 'assets/**/*.zip' 2>/dev/null || echo "无 zip 文件需删除"
 
       - name: 4. 下载 JADX
@@ -37,11 +35,11 @@ jobs:
           JADX_BIN=$(find jadx_tool -name "jadx" -type f -executable | head -n 1)
           echo "JADX_BIN=$JADX_BIN" >> $GITHUB_ENV
 
-      - name: 5. 反编译（增大内存，跳过资源）
+      - name: 5. 反编译（通过 JAVA_OPTS 增大内存，跳过资源）
         run: |
           chmod +x $JADX_BIN
-          # 分配 4GB 堆内存，跳过资源解析
-          $JADX_BIN --export-gradle -d out --no-res -J-Xmx4g target.apk
+          export JAVA_OPTS="-Xmx4g"
+          $JADX_BIN --export-gradle -d out --no-res target.apk
 
       - name: 6. 上传源码
         uses: actions/upload-artifact@v4
