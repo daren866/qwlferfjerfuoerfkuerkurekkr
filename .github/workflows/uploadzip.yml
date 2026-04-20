@@ -27,7 +27,7 @@ jobs:
       - name: 下载产物
         run: |
           ARTIFACT_ID=$(echo "${{ github.event.inputs.artifact_url }}" | grep -oP '/artifacts/\K\d+')
-          gh api "repos/${{ github.repository }}/actions/artifacts/$ARTIFACT_ID/zip" --output code.zip
+          gh api "repos/${{ github.repository }}/actions/artifacts/$ARTIFACT_ID/zip" > code.zip
           ls -lh code.zip
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
