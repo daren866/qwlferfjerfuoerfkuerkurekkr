@@ -15,17 +15,23 @@ jobs:
           wget -O target.apk "${{ github.event.inputs.url }}"
           ls -lh target.apk
 
-      - name: 2. 下载 JADX 反编译工具
+      - name: 2. 下载并准备 JADX
         run: |
           wget -O jadx.zip https://github.com/skylot/jadx/releases/download/v1.5.3/jadx-1.5.3.zip
-          unzip -q jadx.zip
-          # 重命名成标准名称，防止路径错误
-          mv jadx-1.5.3 jadx
+          unzip -q jadx.zip -d jadx_tool
+          # 查找真实的 jadx 可执行文件
+          JADX_BIN=$(find jadx_tool -name "jadx" -type f -executable | head -n 1)
+          if [ -z "$JADX_BIN" ]; then
+            echo "未找到 jadx 可执行文件，请检查下载和解压过程"
+            exit 1
+          fi
+          echo "找到 jadx 路径: $JADX_BIN"
+          echo "JADX_BIN=$JADX_BIN" >> $GITHUB_ENV
 
       - name: 3. 开始逆向！（核心命令）
         run: |
-          chmod +x jadx/bin/jadx
-          jadx/bin/jadx --export-gradle -d out target.apk
+          chmod +x $JADX_BIN
+          $JADX_BIN --export-gradle -d out target.apk
 
       - name: 4. 上传逆向完成的源码
         uses: actions/upload-artifact@v4
