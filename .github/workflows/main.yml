@@ -1,10 +1,10 @@
-name: 执行自定义curl · 下载APK · 自动反编译
+name: 输入APK直链 · 自动带请求头 · 反编译
 
 on:
   workflow_dispatch:
     inputs:
-      curl_command:
-        description: '粘贴完整的curl下载命令'
+      url:
+        description: '粘贴 123云盘 下载直链'
         required: true
 
 jobs:
@@ -13,13 +13,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: 清理目录
-        run: rm -rf cache && mkdir -p cache
+      - name: 创建缓存目录
+        run: mkdir -p cache
 
-      - name: 执行你粘贴的curl命令
+      - name: 下载APK（完整请求头，不会403）
         run: |
-          # 执行你输入的完整curl命令，并强制输出到 cache/target.apk
-          ${{ github.event.inputs.curl_command }} -o cache/target.apk
+          curl -L -f --ipv4 \
+            -H 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8' \
+            -H 'Accept-Language: zh-CN,zh;q=0.9' \
+            -H 'Cache-Control: no-cache' \
+            -H 'Connection: keep-alive' \
+            -H 'Pragma: no-cache' \
+            -H 'Referer: https://www.123pan.com/' \
+            -H 'Upgrade-Insecure-Requests: 1' \
+            -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36' \
+            -H 'sec-ch-ua: "Google Chrome";v="147", "Not.A/Brand";v="8", "Chromium";v="147"' \
+            -H 'sec-ch-ua-mobile: ?0' \
+            -H 'sec-ch-ua-platform: "Windows"' \
+            -o "cache/target.apk" \
+            "${{ github.event.inputs.url }}"
 
       - name: 查看文件大小
         run: ls -lh cache/target.apk
@@ -31,7 +43,7 @@ jobs:
           chmod +x jadx/bin/jadx
           jadx/bin/jadx --export-gradle -d output cache/target.apk
 
-      - name: 上传反编译结果
+      - name: 上传结果
         uses: actions/upload-artifact@v4
         with:
           name: decompiled-project
