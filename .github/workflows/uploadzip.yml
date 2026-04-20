@@ -18,6 +18,9 @@ jobs:
       actions: read
       contents: write
     steps:
+      - name: 检出仓库（解决 git 上下文问题）
+        uses: actions/checkout@v4
+
       - name: 安装 gh CLI
         run: |
           curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
@@ -25,16 +28,28 @@ jobs:
           sudo apt update
           sudo apt install gh -y
 
-      - name: 下载并上传
+      - name: 下载 Java源码 产物
         run: |
-          # 下载 Java源码 产物
-          gh run download ${{ github.event.inputs.run_id }} --name "Java源码"
+          # 切换到仓库目录
+          cd $GITHUB_WORKSPACE
+          gh run download ${{ github.event.inputs.run_id }} --name "Java源码" --repo "${{ github.repository }}"
+          ls -lh "Java源码.zip"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 上传到 Release
+        run: |
+          TAG="${{ github.event.inputs.tag_name }}"
+          cd $GITHUB_WORKSPACE
           
-          # 上传到 Release
-          gh release upload ${{ github.event.inputs.tag_name }} "Java源码.zip" --clobber \
-            --repo "${{ github.repository }}" || \
-          gh release create ${{ github.event.inputs.tag_name }} "Java源码.zip" \
-            --title "${{ github.event.inputs.tag_name }}" \
-            --notes "从 Actions 产物自动上传"
+          if gh release view "$TAG" --repo "${{ github.repository }}" &>/dev/null; then
+            echo "Release $TAG 已存在，上传文件..."
+            gh release upload "$TAG" "Java源码.zip" --clobber --repo "${{ github.repository }}"
+          else
+            echo "创建新 Release: $TAG"
+            gh release create "$TAG" "Java源码.zip" --title "$TAG" --notes "从 Actions 产物自动上传" --repo "${{ github.repository }}"
+          fi
+          
+          echo "✅ 上传完成"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
