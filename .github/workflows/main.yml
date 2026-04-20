@@ -1,11 +1,6 @@
-name: 输入APK直链 · 自动带请求头 · 反编译
-
+name: 123云盘APK自动下载 · 反编译
 on:
   workflow_dispatch:
-    inputs:
-      url:
-        description: '粘贴 123云盘 下载直链'
-        required: true
 
 jobs:
   build:
@@ -13,30 +8,31 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: 创建缓存目录
-        run: mkdir -p cache
-
-      - name: 下载APK（完整请求头，不会403）
+      - name: 下载 APK（1:1 复制你能下载的命令）
         run: |
-          curl -L -f --ipv4 \
-            -H 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8' \
+          mkdir -p cache
+          curl 'https://59-47-225-58.pd1.cjjd19.com/1135-user-other-free-download-cdn.123295.com/123-277/037824a7/1815635943-0/037824a73a646813d0aacc882ca55115/c-m105?v=5&t=1777295279&r=V3GHQR&bzc=1&bzs=313831353633353934333a323a313a333333303536363133&ur=vvmgvgpngvnl&urn=0&s=1777295279d6f29bb9413521580449d5e60f3c2bcd&bzp=0&bi=403044789&filename=bilibili.apk&x-mf-biz-cid=f3b6da60-a44d-4344-8b6c-378a8933fc60-3dab77&auto_redirect=0&ndcp=1&cache_type=1' \
+            -H 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7' \
             -H 'Accept-Language: zh-CN,zh;q=0.9' \
             -H 'Cache-Control: no-cache' \
             -H 'Connection: keep-alive' \
             -H 'Pragma: no-cache' \
             -H 'Referer: https://www.123pan.com/' \
+            -H 'Sec-Fetch-Dest: document' \
+            -H 'Sec-Fetch-Mode: navigate' \
+            -H 'Sec-Fetch-Site: cross-site' \
+            -H 'Sec-Fetch-User: ?1' \
             -H 'Upgrade-Insecure-Requests: 1' \
             -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36' \
             -H 'sec-ch-ua: "Google Chrome";v="147", "Not.A/Brand";v="8", "Chromium";v="147"' \
             -H 'sec-ch-ua-mobile: ?0' \
             -H 'sec-ch-ua-platform: "Windows"' \
-            -o "cache/target.apk" \
-            "${{ github.event.inputs.url }}"
+            -o cache/target.apk
 
       - name: 查看文件大小
         run: ls -lh cache/target.apk
 
-      - name: 反编译APK
+      - name: 反编译
         run: |
           wget -q -O jadx.zip https://github.com/skylot/jadx/releases/download/v1.5.3/jadx-1.5.3.zip
           unzip -q jadx.zip
