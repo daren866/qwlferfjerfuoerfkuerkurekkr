@@ -1,26 +1,30 @@
-name: 下载APK并反编译
+name: 最强APK反编译
 on:
   workflow_dispatch:
+    inputs:
+      url:
+        description: 输入 transfer.sh / file.io 公开直链
+        required: true
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: 下载APK
+      - name: 下载真实APK
         run: |
-          mkdir -p cache
-          wget --no-check-certificate -O cache/target.apk "https://download-sc1.huang1111.cn/api/v3/slave/download/0/bmV3Mi9iYXNpYy8xNDkyMTYvMjAyNi8wNDIwLzIxMjgvYmlsaWJpbGkuYXBr/bilibili.apk?sign=65T9ZTfwzfKQyFr6yw7r9X_SO5NpcC-ArPzWK4say3M%3D%3A1776692415"
-          ls -lh cache/target.apk
+          wget -O target.apk "${{ github.event.inputs.url }}"
+          ls -lh target.apk  # 必须显示 几百MB
 
-      - name: 反编译
+      - name: 下载反编译工具
         run: |
           wget -O jadx.zip https://github.com/skylot/jadx/releases/download/v1.5.3/jadx-1.5.3.zip
           unzip -q jadx.zip
-          chmod +x jadx/bin/jadx
-          jadx/bin/jadx --export-gradle -d output cache/target.apk
 
-      - name: 上传结果
+      - name: 开始逆向！
+        run: jadx/bin/jadx --export-gradle -d out target.apk
+
+      - name: 获取源码
         uses: actions/upload-artifact@v4
         with:
-          name: decompiled
-          path: output/
+          name: 逆向完成-源码
+          path: out/
