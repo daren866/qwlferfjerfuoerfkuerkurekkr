@@ -12,21 +12,18 @@ jobs:
     steps:
       - name: 1. 下载 APK（支持重定向）
         run: |
-          # 使用 --max-redirect 跟随重定向，并保留原始文件名
           wget --max-redirect=10 -O target.apk "${{ github.event.inputs.url }}"
           echo "下载完成，文件大小："
           ls -lh target.apk
 
       - name: 2. 验证 APK 文件完整性
         run: |
-          # 检查是否为有效的 ZIP 文件（APK 本质是 ZIP）
           if ! unzip -t target.apk > /dev/null 2>&1; then
             echo "❌ 错误：下载的文件不是有效的 APK/ZIP 文件"
             echo "可能原因："
             echo "  1. URL 不是直接下载链接（例如是网页链接）"
             echo "  2. 文件下载不完整"
             echo "  3. 文件已损坏"
-            echo "请检查 URL 是否直接指向 APK 文件（建议使用 transfer.sh 等提供的直链）"
             exit 1
           fi
           echo "✅ APK 文件完整性验证通过"
@@ -42,10 +39,10 @@ jobs:
           fi
           echo "JADX_BIN=$JADX_BIN" >> $GITHUB_ENV
 
-      - name: 4. 开始逆向
+      - name: 4. 开始逆向（跳过资源解码，避免 assets 中损坏的 zip 文件干扰）
         run: |
           chmod +x $JADX_BIN
-          $JADX_BIN --export-gradle -d out target.apk
+          $JADX_BIN --export-gradle -d out --no-res target.apk
 
       - name: 5. 上传逆向完成的源码
         uses: actions/upload-artifact@v4
