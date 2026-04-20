@@ -1,0 +1,116 @@
+name: 上传产物到 Releases
+on:
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Release 标签名（例如：v1.0.0）'
+        required: true
+        default: 'latest'
+      release_name:
+        description: 'Release 标题（可选，默认使用 tag_name）'
+        required: false
+      artifact_url:
+        description: '产物下载链接（例如：https://github.com/xxx/xxx/actions/runs/xxx/artifacts/xxx）'
+        required: true
+        default: 'https://github.com/daren866/play-coder/actions/runs/24675353299/artifacts/653566420'
+
+jobs:
+  upload-to-releases:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # 允许创建 Release 和上传文件
+    steps:
+      - name: 检查输入参数
+        run: |
+          echo "Release 标签: ${{ github.event.inputs.tag_name }}"
+          echo "产物链接: ${{ github.event.inputs.artifact_url }}"
+
+      - name: 下载产物（code.zip）
+        run: |
+          # 从 GitHub Actions 产物链接下载
+          ARTIFACT_URL="${{ github.event.inputs.artifact_url }}"
+          
+          # 提取 artifact ID（从 URL 中获取）
+          ARTIFACT_ID=$(echo "$ARTIFACT_URL" | grep -oP '/artifacts/\K\d+')
+          echo "Artifact ID: $ARTIFACT_ID"
+          
+          # 使用 GitHub API 下载产物（需要认证）
+          curl -L \
+            -H "Accept: application/vnd.github.v3+json" \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -o code.zip \
+            "https://api.github.com/repos/${{ github.repository }}/actions/artifacts/$ARTIFACT_ID/zip"
+          
+          # 检查下载是否成功
+          if [ -f code.zip ]; then
+            echo "✅ 下载成功"
+            ls -lh code.zip
+          else
+            echo "❌ 下载失败"
+            exit 1
+          fi
+
+      - name: 创建 Release（如果不存在）
+        run: |
+          TAG_NAME="${{ github.event.inputs.tag_name }}"
+          RELEASE_NAME="${{ github.event.inputs.release_name }}"
+          
+          # 如果没有提供 release_name，使用 tag_name
+          if [ -z "$RELEASE_NAME" ]; then
+            RELEASE_NAME="$TAG_NAME"
+          fi
+          
+          # 尝试创建 Release（如果已存在则忽略错误）
+          echo "创建 Release: $TAG_NAME"
+          curl -X POST \
+            -H "Accept: application/vnd.github.v3+json" \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            https://api.github.com/repos/${{ github.repository }}/releases \
+            -d "{
+              \"tag_name\": \"$TAG_NAME\",
+              \"name\": \"$RELEASE_NAME\",
+              \"body\": \"从 Actions 产物自动上传: ${{ github.event.inputs.artifact_url }}\",
+              \"draft\": false,
+              \"prerelease\": false
+            }" || echo "Release 可能已存在，继续上传..."
+
+      - name: 获取 Release ID 和上传 URL
+        run: |
+          TAG_NAME="${{ github.event.inputs.tag_name }}"
+          
+          # 获取 Release 信息
+          RESPONSE=$(curl -s \
+            -H "Accept: application/vnd.github.v3+json" \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/tags/$TAG_NAME")
+          
+          # 提取 upload_url（去掉 {?name,label} 部分）
+          UPLOAD_URL=$(echo "$RESPONSE" | grep -o '"upload_url": "[^"]*"' | head -1 | sed 's/"upload_url": "//' | sed 's/",//' | sed 's/{?name,label}//')
+          echo "UPLOAD_URL=$UPLOAD_URL" >> $GITHUB_ENV
+          
+          if [ -z "$UPLOAD_URL" ]; then
+            echo "❌ 无法获取 Release ID"
+            exit 1
+          fi
+          echo "✅ 获取到上传 URL"
+
+      - name: 上传 code.zip 到 Release
+        run: |
+          # 上传文件到 Release
+          curl -X POST \
+            -H "Accept: application/vnd.github.v3+json" \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Content-Type: application/zip" \
+            --data-binary "@code.zip" \
+            "${{ env.UPLOAD_URL }}?name=code.zip"
+          
+          echo "✅ code.zip 已上传到 Release"
+
+      - name: 验证上传结果
+        run: |
+          echo "验证 Release 文件..."
+          curl -s \
+            -H "Accept: application/vnd.github.v3+json" \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/tags/${{ github.event.inputs.tag_name }}" \
+            | grep -o '"name": "[^"]*"' | grep code.zip && echo "✅ 上传成功" || echo "⚠️ 未找到 code.zip"
