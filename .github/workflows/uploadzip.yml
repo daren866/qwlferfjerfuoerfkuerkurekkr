@@ -1,4 +1,4 @@
-name: 上传产物到 Releases（gh CLI版）
+name: 上传产物到 Releases
 on:
   workflow_dispatch:
     inputs:
@@ -32,16 +32,19 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: 上传到 Release
+      - name: 创建并上传到 Release
         run: |
-          if gh release view "${{ github.event.inputs.tag_name }}" > /dev/null 2>&1; then
-            echo "Release 已存在，上传文件..."
-            gh release upload "${{ github.event.inputs.tag_name }}" code.zip --clobber
+          TAG="${{ github.event.inputs.tag_name }}"
+          
+          # 检查 Release 是否存在
+          if gh release view "$TAG" &>/dev/null; then
+            echo "Release $TAG 已存在，上传文件..."
+            gh release upload "$TAG" code.zip --clobber
           else
-            echo "创建新 Release..."
-            gh release create "${{ github.event.inputs.tag_name }}" code.zip \
-              --title "${{ github.event.inputs.tag_name }}" \
-              --notes "从 Actions 产物自动上传"
+            echo "创建新 Release: $TAG"
+            gh release create "$TAG" code.zip --title "$TAG" --notes "从 Actions 产物自动上传"
           fi
+          
+          echo "✅ 上传完成"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
