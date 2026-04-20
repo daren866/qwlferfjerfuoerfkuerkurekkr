@@ -13,47 +13,38 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # 缓存（key = androidapks）
       - name: 配置缓存
         uses: actions/cache@v4
         with:
           path: ./cache
           key: androidapks
 
-      # 下载 123云盘 APK（带完整授权，不会403）
-      - name: 下载APK
+      - name: 下载APK（修复版）
         run: |
           mkdir -p cache
-          curl -L \
-            -H 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8' \
-            -H 'Accept-Language: zh-CN,zh;q=0.9' \
-            -H 'Cache-Control: no-cache' \
-            -H 'Connection: keep-alive' \
-            -H 'Pragma: no-cache' \
-            -H 'Referer: https://www.123pan.com/' \
+          curl -L -f --ipv4 \
             -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36' \
-            -H 'sec-ch-ua: "Google Chrome";v="147", "Not.A/Brand";v="8", "Chromium";v="147"' \
-            -H 'sec-ch-ua-mobile: ?0' \
-            -H 'sec-ch-ua-platform: "Windows"' \
-            -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3NzcyOTQ0MDcsImlhdCI6MTc3NjY4OTYwNywiaWQiOjE4MTU2MzU5NDMsIm1haWwiOiIiLCJuaWNrbmFtZSI6IjE4MTcyNjQ1OTYyIiwic3VwcGVyIjpmYWxzZSwidXNlcm5hbWUiOjE4MTcyNjQ1OTYyLCJ2IjowfQ.Cf2Rxk5kEtwSvTV-sETrUq_5kfnIo-0CVu4MkHToelc' \
-            -b 'cna=1491b56092fe4681981dbe3de5ce2636' \
-            --output cache/target.apk \
+            -H 'Referer: https://www.123pan.com/' \
+            -H 'Accept: */*' \
+            --connect-timeout 30 \
+            --max-time 3600 \
+            -o 'cache/target.apk' \
             "${{ github.event.inputs.apk_url }}"
+          
+          # 检查文件大小，防止下载失败
+          ls -lh cache/target.apk
 
-      # 下载 JADX
       - name: 安装 JADX
         run: |
-          wget -O jadx.zip https://github.com/skylot/jadx/releases/download/v1.5.3/jadx-1.5.3.zip
+          wget -q -O jadx.zip https://github.com/skylot/jadx/releases/download/v1.5.3/jadx-1.5.3.zip
           unzip -q jadx.zip -d jadx
+          chmod +x jadx/bin/jadx
 
-      # 反编译
       - name: 反编译APK
         run: |
-          chmod +x jadx/bin/jadx
           jadx/bin/jadx --export-gradle -d output cache/target.apk
 
-      # 上传结果
-      - name: 上传反编译结果
+      - name: 上传结果
         uses: actions/upload-artifact@v4
         with:
           name: decompiled
