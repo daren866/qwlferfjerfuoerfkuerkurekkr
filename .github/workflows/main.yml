@@ -6,7 +6,7 @@ on:
         description: 粘贴 APK 公开直链
         required: true
       tag_name:
-        description: 'Release 标签名（可选，不填则自动生成）'
+        description: 'Release 标签名（可选）'
         required: false
         default: ''
 
@@ -16,53 +16,88 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: 检出仓库（解决 git 上下文问题）
+      - name: 检出仓库
         uses: actions/checkout@v4
 
       - name: 下载 APK
         run: wget --max-redirect=10 -O target.apk "${{ github.event.inputs.url }}"
 
-      - name: 安装 dex2jar 和 CFR
+      - name: 安装工具
         run: |
+          # 安装 dex2jar
           wget -O dex-tools.zip https://github.com/pxb1988/dex2jar/releases/download/v2.4/dex-tools-v2.4.zip
           unzip -q dex-tools.zip
           chmod +x dex-tools-v2.4/*.sh
+          
+          # 安装 CFR
           wget -O cfr.jar https://github.com/leibnitz27/cfr/releases/download/0.152/cfr-0.152.jar
+          
+          # 安装 jadx（备用）
+          wget -O jadx.zip https://github.com/skylot/jadx/releases/download/v1.5.3/jadx-1.5.3.zip
+          unzip -q jadx.zip
+          chmod +x jadx-1.5.3/bin/jadx
 
       - name: 提取 DEX 文件
         run: |
           unzip -q target.apk -d temp
           echo "DEX 文件列表："
-          ls -la temp/*.dex 2>/dev/null || echo "未找到 .dex 文件"
+          ls -la temp/*.dex
 
       - name: 转换 DEX 为 JAR
         run: |
           cd temp
-          ../dex-tools-v2.4/d2j-dex2jar.sh classes*.dex -o ../app.jar
-          cd ..
+          # 转换所有 dex 文件
+          for dex in *.dex; do
+            echo "转换: $dex"
+            ../dex-tools-v2.4/d2j-dex2jar.sh "$dex"
+          done
           
-          if [ -f app.jar ]; then
-            echo "✅ JAR 文件生成成功"
-            ls -lh app.jar
-          else
-            for dex in temp/*.dex; do
-              echo "转换: $dex"
-              dex-tools-v2.4/d2j-dex2jar.sh "$dex"
-            done
-            cp temp/*-dex2jar.jar ./app.jar 2>/dev/null || true
+          # 合并所有 jar 文件
+          mkdir -p merged_classes
+          for jar in *-dex2jar.jar; do
+            echo "解压: $jar"
+            unzip -q "$jar" -d merged_classes
+          done
+          
+          # 重新打包成单个 jar
+          cd merged_classes
+          jar cf ../app.jar .
+          cd ../..
+          
+          echo "合并后的 JAR 大小："
+          ls -lh temp/app.jar
+          cp temp/app.jar .
+
+      - name: 反编译 JAR 为 Java 源码（使用 CFR）
+        run: |
+          mkdir -p java_src
+          echo "开始反编译..."
+          java -jar cfr.jar app.jar --outputdir java_src
+          echo "反编译完成"
+          echo "Java 文件数量："
+          find java_src -name "*.java" | wc -l
+          
+          # 如果 CFR 反编译失败或没有 Java 文件，使用 jadx
+          if [ $(find java_src -name "*.java" | wc -l) -eq 0 ]; then
+            echo "CFR 反编译无结果，尝试使用 jadx..."
+            mkdir -p java_src_jadx
+            ./jadx-1.5.3/bin/jadx -d java_src_jadx app.jar
+            mv java_src_jadx/* java_src/
           fi
 
-      - name: 反编译 JAR 为 Java 源码
+      - name: 检查反编译结果
         run: |
-          if [ -f app.jar ]; then
-            mkdir -p java_src
-            java -jar cfr.jar app.jar --outputdir java_src
-            echo "✅ Java 源码反编译完成"
-            echo "Java 文件数量："
-            find java_src -name "*.java" | wc -l
-          else
-            mkdir -p java_src
-            cp temp/*.dex java_src/ 2>/dev/null || true
+          echo "=== 反编译结果统计 ==="
+          echo "Java 文件数: $(find java_src -name "*.java" | wc -l)"
+          echo "目录结构:"
+          ls -la java_src/
+          
+          # 如果还是没有 Java 文件，直接打包 JAR 作为备选
+          if [ $(find java_src -name "*.java" | wc -l) -eq 0 ]; then
+            echo "⚠️ 反编译失败，将直接上传 JAR 文件"
+            mkdir -p java_src_backup
+            cp app.jar java_src_backup/
+            mv java_src_backup java_src
           fi
 
       - name: 打包源码
@@ -71,6 +106,10 @@ jobs:
           zip -r ../Java源码.zip .
           cd ..
           ls -lh Java源码.zip
+          
+          # 显示 zip 内容
+          echo "ZIP 文件内容："
+          unzip -l Java源码.zip | head -20
 
       - name: 配置 git
         run: |
@@ -79,7 +118,6 @@ jobs:
 
       - name: 上传到 Release
         run: |
-          # 设置 tag 名称
           if [ -n "${{ github.event.inputs.tag_name }}" ]; then
             TAG="${{ github.event.inputs.tag_name }}"
           else
@@ -88,13 +126,12 @@ jobs:
           
           echo "使用 Release 标签: $TAG"
           
-          # 创建并上传 Release
           gh release upload "$TAG" Java源码.zip --clobber --repo "${{ github.repository }}" || \
           gh release create "$TAG" Java源码.zip --title "$TAG" --notes "APK 逆向产物自动上传" --repo "${{ github.repository }}"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: 上传产物（保留，作为备份）
+      - name: 上传产物备份
         uses: actions/upload-artifact@v4
         with:
           name: Java源码
