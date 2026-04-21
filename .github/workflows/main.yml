@@ -1,140 +1,17 @@
 name: APK 逆向（轻量版）
+
 on:
   workflow_dispatch:
     inputs:
       url:
-        description: 粘贴 APK 公开直链
-        required: trueaaname: APK 逆向（轻量版）
-on:
-  workflow_dispatch:
-    inputs:
-      url:
-        description: 粘贴 APK 公开直链
+        description: '粘贴 APK 公开直链'
         required: true
+        type: string
       tag_name:
         description: 'Release 标签名（可选）'
         required: false
         default: ''
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - name: 检出仓库
-        uses: actions/checkout@v4
-
-      - name: 下载 APK
-        run: wget --max-redirect=10 -O target.apk "${{ github.event.inputs.url }}"
-
-      - name: 安装 dex2jar
-        run: |
-          wget -O dex-tools.zip https://github.com/pxb1988/dex2jar/releases/download/v2.4/dex-tools-v2.4.zip
-          unzip -q dex-tools.zip
-          chmod +x dex-tools-v2.4/*.sh
-
-      - name: 下载 CFR
-        run: |
-          wget -O cfr.jar https://github.com/leibnitz27/cfr/releases/download/0.152/cfr-0.152.jar
-          ls -lh cfr.jar
-          # 验证文件
-          if [ -f cfr.jar ]; then
-            echo "✅ CFR 下载成功"
-          else
-            echo "❌ CFR 下载失败"
-            exit 1
-          fi
-
-      - name: 提取 DEX 文件
-        run: |
-          unzip -q target.apk -d temp
-          echo "DEX 文件列表："
-          ls -la temp/*.dex
-
-      - name: 转换 DEX 为 JAR
-        run: |
-          cd temp
-          # 转换所有 dex 文件
-          for dex in *.dex; do
-            echo "转换: $dex"
-            ../dex-tools-v2.4/d2j-dex2jar.sh "$dex"
-          done
-          
-          # 合并所有 jar 文件
-          mkdir -p merged_classes
-          for jar in *-dex2jar.jar; do
-            echo "解压: $jar"
-            unzip -q "$jar" -d merged_classes
-          done
-          
-          # 重新打包成单个 jar
-          cd merged_classes
-          jar cf ../app.jar .
-          cd ../..
-          
-          echo "合并后的 JAR 大小："
-          ls -lh temp/app.jar
-          cp temp/app.jar .
-
-      - name: 反编译 JAR 为 Java 源码
-        run: |
-          mkdir -p java_src
-          echo "开始反编译（分配 4GB 内存）..."
-          java -Xmx4g -jar cfr.jar app.jar --outputdir java_src
-          echo "反编译完成"
-          echo "Java 文件数量："
-          find java_src -name "*.java" | wc -l
-
-      - name: 检查反编译结果
-        run: |
-          echo "=== 反编译结果统计 ==="
-          echo "Java 文件数: $(find java_src -name "*.java" | wc -l)"
-          
-          # 如果没有 Java 文件，直接打包 JAR 作为备选
-          if [ $(find java_src -name "*.java" | wc -l) -eq 0 ]; then
-            echo "⚠️ 反编译失败，将直接上传 JAR 文件"
-            rm -rf java_src
-            mkdir -p java_src
-            cp app.jar java_src/
-          fi
-
-      - name: 打包源码
-        run: |
-          cd java_src
-          zip -r ../Java源码.zip .
-          cd ..
-          ls -lh Java源码.zip
-
-      - name: 配置 git
-        run: |
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
-
-      - name: 上传到 Release
-        run: |
-          if [ -n "${{ github.event.inputs.tag_name }}" ]; then
-            TAG="${{ github.event.inputs.tag_name }}"
-          else
-            TAG="apk-reverse-$(date +'%Y%m%d-%H%M%S')"
-          fi
-          
-          echo "使用 Release 标签: $TAG"
-          
-          gh release upload "$TAG" Java源码.zip --clobber --repo "${{ github.repository }}" || \
-          gh release create "$TAG" Java源码.zip --title "$TAG" --notes "APK 逆向产物自动上传" --repo "${{ github.repository }}"
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: 上传产物备份
-        uses: actions/upload-artifact@v4
-        with:
-          name: Java源码
-          path: java_src/
-      tag_name:
-        description: 'Release 标签名（可选）'
-        required: false
-        default: ''
+        type: string
 
 jobs:
   build:
@@ -163,20 +40,17 @@ jobs:
       - name: 转换 DEX 为 JAR
         run: |
           cd temp
-          # 转换所有 dex 文件
           for dex in *.dex; do
             echo "转换: $dex"
             ../dex-tools-v2.4/d2j-dex2jar.sh "$dex"
           done
           
-          # 合并所有 jar 文件
           mkdir -p merged_classes
           for jar in *-dex2jar.jar; do
             echo "解压: $jar"
             unzip -q "$jar" -d merged_classes
           done
           
-          # 重新打包成单个 jar
           cd merged_classes
           jar cf ../app.jar .
           cd ../..
@@ -185,30 +59,10 @@ jobs:
           ls -lh temp/app.jar
           cp temp/app.jar .
 
-      - name: 反编译 JAR 为 Java 源码（增加内存）
+      - name: 打包 JAR 文件
         run: |
           mkdir -p java_src
-          echo "开始反编译（分配 4GB 内存）..."
-          java -Xmx4g -jar cfr.jar app.jar --outputdir java_src
-          echo "反编译完成"
-          echo "Java 文件数量："
-          find java_src -name "*.java" | wc -l
-
-      - name: 检查反编译结果
-        run: |
-          echo "=== 反编译结果统计 ==="
-          echo "Java 文件数: $(find java_src -name "*.java" | wc -l)"
-          
-          # 如果没有 Java 文件，直接打包 JAR 作为备选
-          if [ $(find java_src -name "*.java" | wc -l) -eq 0 ]; then
-            echo "⚠️ 反编译失败，将直接上传 JAR 文件"
-            mkdir -p java_src_backup
-            cp app.jar java_src_backup/
-            mv java_src_backup java_src
-          fi
-
-      - name: 打包源码
-        run: |
+          cp app.jar java_src/
           cd java_src
           zip -r ../Java源码.zip .
           cd ..
