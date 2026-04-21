@@ -22,15 +22,11 @@ jobs:
       - name: 下载 APK
         run: wget --max-redirect=10 -O target.apk "${{ github.event.inputs.url }}"
 
-      - name: 安装 dex2jar 和 CFR
+      - name: 安装 dex2jar
         run: |
-          # 安装 dex2jar
           wget -O dex-tools.zip https://github.com/pxb1988/dex2jar/releases/download/v2.4/dex-tools-v2.4.zip
           unzip -q dex-tools.zip
           chmod +x dex-tools-v2.4/*.sh
-          
-          # 安装 CFR
-          wget -O cfr.jar https://github.com/leibnitz27/cfr/releases/download/0.152/cfr-0.152.jar
 
       - name: 提取 DEX 文件
         run: |
@@ -63,11 +59,11 @@ jobs:
           ls -lh temp/app.jar
           cp temp/app.jar .
 
-      - name: 反编译 JAR 为 Java 源码
+      - name: 反编译 JAR 为 Java 源码（增加内存）
         run: |
           mkdir -p java_src
-          echo "开始反编译..."
-          java -jar cfr.jar app.jar --outputdir java_src
+          echo "开始反编译（分配 4GB 内存）..."
+          java -Xmx4g -jar cfr.jar app.jar --outputdir java_src
           echo "反编译完成"
           echo "Java 文件数量："
           find java_src -name "*.java" | wc -l
@@ -77,7 +73,7 @@ jobs:
           echo "=== 反编译结果统计 ==="
           echo "Java 文件数: $(find java_src -name "*.java" | wc -l)"
           
-          # 如果没有 Java 文件，直接打包 JAR
+          # 如果没有 Java 文件，直接打包 JAR 作为备选
           if [ $(find java_src -name "*.java" | wc -l) -eq 0 ]; then
             echo "⚠️ 反编译失败，将直接上传 JAR 文件"
             mkdir -p java_src_backup
