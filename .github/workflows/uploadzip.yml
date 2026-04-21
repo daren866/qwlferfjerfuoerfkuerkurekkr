@@ -10,53 +10,26 @@ on:
 jobs:
   upload:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
-      - name: 下载产物（使用产物 ID）
+      - name: 检出仓库
+        uses: actions/checkout@v4
+
+      - name: 配置 git
         run: |
-          ARTIFACT_ID="6535664207"
-          
-          echo "下载产物 ID: $ARTIFACT_ID"
-          
-          # 使用 --output 保存二进制文件，避免输出到终端
-          curl -L \
-            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            --output code.zip \
-            "https://api.github.com/repos/${{ github.repository }}/actions/artifacts/$ARTIFACT_ID/zip"
-          
-          echo "下载完成，文件大小："
-          ls -lh code.zip
-          
-          # 验证文件
-          if file code.zip | grep -q "Zip archive"; then
-            echo "✅ 文件验证成功"
-          else
-            echo "⚠️ 文件可能不是 ZIP 格式"
-          fi
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+
+      - name: 使用 PAT 下载产物
+        run: |
+          gh run download 24675353299 --name "Java源码" --repo "${{ github.repository }}"
+          ls -lh "Java源码.zip"
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}  # 从 Secrets 读取
 
       - name: 上传到 Release
         run: |
           TAG="${{ github.event.inputs.tag_name }}"
-          
-          # 使用 gh CLI 上传（更简单）
-          # 先安装 gh
-          type -p curl >/dev/null || sudo apt install curl -y
-          curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
-          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list
-          sudo apt update
-          sudo apt install gh -y
-          
-          # 创建或更新 Release
-          if gh release view "$TAG" &>/dev/null; then
-            echo "Release 已存在，上传文件..."
-            gh release upload "$TAG" code.zip --clobber
-          else
-            echo "创建新 Release..."
-            gh release create "$TAG" code.zip --title "$TAG" --notes "从 Actions 产物自动上传"
-          fi
-          
-          echo "✅ 上传完成"
+          gh release upload "$TAG" "Java源码.zip" --clobber --repo "${{ github.repository }}" || \
+          gh release create "$TAG" "Java源码.zip" --title "$TAG" --notes "自动上传" --repo "${{ github.repository }}"
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
