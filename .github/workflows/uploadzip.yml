@@ -10,26 +10,36 @@ on:
 jobs:
   upload:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: 检出仓库
         uses: actions/checkout@v4
 
-      - name: 配置 git
-        run: |
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
+      - name: 下载同工作流的产物
+        uses: actions/download-artifact@v4
+        with:
+          name: Java源码
+          path: downloaded_artifact
 
-      - name: 使用 PAT 下载产物
+      - name: 打包下载的产物
         run: |
-          gh run download 24675353299 --name "Java源码" --repo "${{ github.repository }}"
-          ls -lh "Java源码.zip"
-        env:
-          GH_TOKEN: ${{ secrets.PAT_TOKEN }}  # 从 Secrets 读取
+          # 将下载的文件夹打包成 zip
+          cd downloaded_artifact
+          zip -r ../code.zip .
+          cd ..
+          ls -lh code.zip
 
       - name: 上传到 Release
         run: |
           TAG="${{ github.event.inputs.tag_name }}"
-          gh release upload "$TAG" "Java源码.zip" --clobber --repo "${{ github.repository }}" || \
-          gh release create "$TAG" "Java源码.zip" --title "$TAG" --notes "自动上传" --repo "${{ github.repository }}"
+          
+          # 配置 git
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          
+          # 创建并上传 Release
+          gh release upload "$TAG" code.zip --clobber --repo "${{ github.repository }}" || \
+          gh release create "$TAG" code.zip --title "$TAG" --notes "自动上传" --repo "${{ github.repository }}"
         env:
-          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
