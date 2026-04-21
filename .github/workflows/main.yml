@@ -14,8 +14,11 @@ jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: write  # 添加写入权限
+      contents: write
     steps:
+      - name: 检出仓库（解决 git 上下文问题）
+        uses: actions/checkout@v4
+
       - name: 下载 APK
         run: wget --max-redirect=10 -O target.apk "${{ github.event.inputs.url }}"
 
@@ -69,6 +72,11 @@ jobs:
           cd ..
           ls -lh Java源码.zip
 
+      - name: 配置 git
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+
       - name: 上传到 Release
         run: |
           # 设置 tag 名称
@@ -79,10 +87,6 @@ jobs:
           fi
           
           echo "使用 Release 标签: $TAG"
-          
-          # 配置 git
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
           
           # 创建并上传 Release
           gh release upload "$TAG" Java源码.zip --clobber --repo "${{ github.repository }}" || \
