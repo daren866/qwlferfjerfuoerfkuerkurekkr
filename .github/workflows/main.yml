@@ -22,7 +22,7 @@ jobs:
       - name: 下载 APK
         run: wget --max-redirect=10 -O target.apk "${{ github.event.inputs.url }}"
 
-      - name: 安装工具
+      - name: 安装 dex2jar 和 CFR
         run: |
           # 安装 dex2jar
           wget -O dex-tools.zip https://github.com/pxb1988/dex2jar/releases/download/v2.4/dex-tools-v2.4.zip
@@ -31,11 +31,6 @@ jobs:
           
           # 安装 CFR
           wget -O cfr.jar https://github.com/leibnitz27/cfr/releases/download/0.152/cfr-0.152.jar
-          
-          # 安装 jadx（备用）
-          wget -O jadx.zip https://github.com/skylot/jadx/releases/download/v1.5.3/jadx-1.5.3.zip
-          unzip -q jadx.zip
-          chmod +x jadx-1.5.3/bin/jadx
 
       - name: 提取 DEX 文件
         run: |
@@ -68,7 +63,7 @@ jobs:
           ls -lh temp/app.jar
           cp temp/app.jar .
 
-      - name: 反编译 JAR 为 Java 源码（使用 CFR）
+      - name: 反编译 JAR 为 Java 源码
         run: |
           mkdir -p java_src
           echo "开始反编译..."
@@ -76,23 +71,13 @@ jobs:
           echo "反编译完成"
           echo "Java 文件数量："
           find java_src -name "*.java" | wc -l
-          
-          # 如果 CFR 反编译失败或没有 Java 文件，使用 jadx
-          if [ $(find java_src -name "*.java" | wc -l) -eq 0 ]; then
-            echo "CFR 反编译无结果，尝试使用 jadx..."
-            mkdir -p java_src_jadx
-            ./jadx-1.5.3/bin/jadx -d java_src_jadx app.jar
-            mv java_src_jadx/* java_src/
-          fi
 
       - name: 检查反编译结果
         run: |
           echo "=== 反编译结果统计 ==="
           echo "Java 文件数: $(find java_src -name "*.java" | wc -l)"
-          echo "目录结构:"
-          ls -la java_src/
           
-          # 如果还是没有 Java 文件，直接打包 JAR 作为备选
+          # 如果没有 Java 文件，直接打包 JAR
           if [ $(find java_src -name "*.java" | wc -l) -eq 0 ]; then
             echo "⚠️ 反编译失败，将直接上传 JAR 文件"
             mkdir -p java_src_backup
@@ -106,10 +91,6 @@ jobs:
           zip -r ../Java源码.zip .
           cd ..
           ls -lh Java源码.zip
-          
-          # 显示 zip 内容
-          echo "ZIP 文件内容："
-          unzip -l Java源码.zip | head -20
 
       - name: 配置 git
         run: |
