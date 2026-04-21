@@ -1,31 +1,97 @@
-name: 上传产物到 Releases
+name: APK 逆向（轻量版）
 on:
   workflow_dispatch:
     inputs:
-      tag_name:
-        description: 'Release 标签名'
+      url:
+        description: 粘贴 APK 公开直链
         required: true
-        default: 'latest'
+      tag_name:
+        description: 'Release 标签名（可选，不填则自动生成）'
+        required: false
+        default: ''
 
 jobs:
-  upload:
+  build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write  # 添加写入权限
     steps:
-      - name: 检出仓库
-        uses: actions/checkout@v4
+      - name: 下载 APK
+        run: wget --max-redirect=10 -O target.apk "${{ github.event.inputs.url }}"
 
-      - name: 使用 gh CLI 下载并上传
+      - name: 安装 dex2jar 和 CFR
         run: |
+          wget -O dex-tools.zip https://github.com/pxb1988/dex2jar/releases/download/v2.4/dex-tools-v2.4.zip
+          unzip -q dex-tools.zip
+          chmod +x dex-tools-v2.4/*.sh
+          wget -O cfr.jar https://github.com/leibnitz27/cfr/releases/download/0.152/cfr-0.152.jar
+
+      - name: 提取 DEX 文件
+        run: |
+          unzip -q target.apk -d temp
+          echo "DEX 文件列表："
+          ls -la temp/*.dex 2>/dev/null || echo "未找到 .dex 文件"
+
+      - name: 转换 DEX 为 JAR
+        run: |
+          cd temp
+          ../dex-tools-v2.4/d2j-dex2jar.sh classes*.dex -o ../app.jar
+          cd ..
+          
+          if [ -f app.jar ]; then
+            echo "✅ JAR 文件生成成功"
+            ls -lh app.jar
+          else
+            for dex in temp/*.dex; do
+              echo "转换: $dex"
+              dex-tools-v2.4/d2j-dex2jar.sh "$dex"
+            done
+            cp temp/*-dex2jar.jar ./app.jar 2>/dev/null || true
+          fi
+
+      - name: 反编译 JAR 为 Java 源码
+        run: |
+          if [ -f app.jar ]; then
+            mkdir -p java_src
+            java -jar cfr.jar app.jar --outputdir java_src
+            echo "✅ Java 源码反编译完成"
+            echo "Java 文件数量："
+            find java_src -name "*.java" | wc -l
+          else
+            mkdir -p java_src
+            cp temp/*.dex java_src/ 2>/dev/null || true
+          fi
+
+      - name: 打包源码
+        run: |
+          cd java_src
+          zip -r ../Java源码.zip .
+          cd ..
+          ls -lh Java源码.zip
+
+      - name: 上传到 Release
+        run: |
+          # 设置 tag 名称
+          if [ -n "${{ github.event.inputs.tag_name }}" ]; then
+            TAG="${{ github.event.inputs.tag_name }}"
+          else
+            TAG="apk-reverse-$(date +'%Y%m%d-%H%M%S')"
+          fi
+          
+          echo "使用 Release 标签: $TAG"
+          
           # 配置 git
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           
-          # 下载产物（gh CLI 自动处理认证）
-          gh run download 24675353299 --name "Java源码"
-          
-          # 上传到 Release
-          TAG="${{ github.event.inputs.tag_name }}"
-          gh release upload "$TAG" "Java源码.zip" --clobber || \
-          gh release create "$TAG" "Java源码.zip" --title "$TAG" --notes "自动上传"
+          # 创建并上传 Release
+          gh release upload "$TAG" Java源码.zip --clobber --repo "${{ github.repository }}" || \
+          gh release create "$TAG" Java源码.zip --title "$TAG" --notes "APK 逆向产物自动上传" --repo "${{ github.repository }}"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 上传产物（保留，作为备份）
+        uses: actions/upload-artifact@v4
+        with:
+          name: Java源码
+          path: java_src/
