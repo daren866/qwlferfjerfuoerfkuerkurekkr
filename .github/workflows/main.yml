@@ -1,77 +1,31 @@
-name: APK 逆向（轻量版）
+name: 上传产物到 Releases
 on:
   workflow_dispatch:
     inputs:
-      url:
-        description: 粘贴 APK 公开直链
+      tag_name:
+        description: 'Release 标签名'
         required: true
+        default: 'latest'
 
 jobs:
-  build:
+  upload:
     runs-on: ubuntu-latest
     steps:
-      - name: 下载 APK
-        run: wget --max-redirect=10 -O target.apk "${{ github.event.inputs.url }}"
+      - name: 检出仓库
+        uses: actions/checkout@v4
 
-      - name: 安装 dex2jar 和 CFR
+      - name: 使用 gh CLI 下载并上传
         run: |
-          # 安装 dex2jar
-          wget -O dex-tools.zip https://github.com/pxb1988/dex2jar/releases/download/v2.4/dex-tools-v2.4.zip
-          unzip -q dex-tools.zip
-          chmod +x dex-tools-v2.4/*.sh
+          # 配置 git
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
           
-          # 安装 CFR 反编译器
-          wget -O cfr.jar https://github.com/leibnitz27/cfr/releases/download/0.152/cfr-0.152.jar
+          # 下载产物（gh CLI 自动处理认证）
+          gh run download 24675353299 --name "Java源码"
           
-          echo "工具安装完成"
-
-      - name: 提取 DEX 文件
-        run: |
-          # 解压 APK 获取所有 classes.dex 文件
-          unzip -q target.apk -d temp
-          echo "DEX 文件列表："
-          ls -la temp/*.dex 2>/dev/null || echo "未找到 .dex 文件"
-
-      - name: 转换 DEX 为 JAR
-        run: |
-          # 进入 temp 目录，转换所有 dex 文件
-          cd temp
-          # 使用通配符匹配所有 classes*.dex
-          ../dex-tools-v2.4/d2j-dex2jar.sh classes*.dex -o ../app.jar
-          cd ..
-          
-          # 检查 JAR 是否生成
-          if [ -f app.jar ]; then
-            echo "✅ JAR 文件生成成功"
-            ls -lh app.jar
-          else
-            echo "❌ JAR 文件生成失败"
-            # 尝试逐个转换
-            for dex in temp/*.dex; do
-              echo "转换: $dex"
-              dex-tools-v2.4/d2j-dex2jar.sh "$dex"
-            done
-            # 合并所有转换后的 jar
-            cp temp/*-dex2jar.jar ./app.jar 2>/dev/null || true
-          fi
-
-      - name: 反编译 JAR 为 Java 源码
-        run: |
-          if [ -f app.jar ]; then
-            mkdir -p java_src
-            java -jar cfr.jar app.jar --outputdir java_src
-            echo "✅ Java 源码反编译完成"
-            echo "Java 文件数量："
-            find java_src -name "*.java" | wc -l
-          else
-            echo "⚠️ 没有找到 JAR 文件，跳过反编译"
-            # 直接上传 temp 目录中的 dex 文件作为备选
-            mkdir -p java_src
-            cp temp/*.dex java_src/ 2>/dev/null || true
-          fi
-
-      - name: 上传源码
-        uses: actions/upload-artifact@v4
-        with:
-          name: Java源码
-          path: java_src/
+          # 上传到 Release
+          TAG="${{ github.event.inputs.tag_name }}"
+          gh release upload "$TAG" "Java源码.zip" --clobber || \
+          gh release create "$TAG" "Java源码.zip" --title "$TAG" --notes "自动上传"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
